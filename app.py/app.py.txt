@@ -1,0 +1,60 @@
+import streamlit as st
+import pandas as pd
+import requests
+import plotly.express as px
+
+# 1. Page Configuration
+st.set_page_config(page_title="Nafas Toshkent | Real-Time Air Quality", layout="wide")
+
+# 2. Enter your ThingSpeak Channel ID here
+CHANNEL_ID = "YOUR_THINGSPEAK_CHANNEL_ID" 
+
+def fetch_data():
+    url = f"https://api.thingspeak.com/channels/{CHANNEL_ID}/feeds.json?results=20"
+    response = requests.get(url)
+    data = response.json()
+    return pd.DataFrame(data['feeds'])
+
+# 3. UI Header
+st.title("🌬️ Nafas Toshkent")
+st.subheader("Real-time Urban Air Quality Monitoring")
+st.divider()
+
+# 4. Sidebar for Status
+st.sidebar.header("Station Status")
+st.sidebar.success("Station: Tashkent Central")
+st.sidebar.info("Sensor: PMS7003 + BME280")
+
+try:
+    df = fetch_data()
+    # Convert data types
+    df['created_at'] = pd.to_datetime(df['created_at'])
+    df['field1'] = pd.to_numeric(df['field1']) # PM2.5
+    df['field2'] = pd.to_numeric(df['field2']) # Temp
+    df['field3'] = pd.to_numeric(df['field3']) # Humidity
+
+    # 5. Top Metrics
+    col1, col2, col3 = st.columns(3)
+    latest = df.iloc[-1]
+    
+    col1.metric("PM2.5 Concentration", f"{latest['field1']} µg/m³")
+    col2.metric("Temperature", f"{latest['field2']} °C")
+    col3.metric("Humidity", f"{latest['field3']}%")
+
+    # 6. Health Recommendation Logic
+    st.write("### 🩺 Health Recommendation")
+    pm_val = latest['field1']
+    if pm_val < 12:
+        st.success("Air quality is Excellent. Perfect for outdoor activities!")
+    elif pm_val < 35:
+        st.warning("Air quality is Moderate. Sensitive groups should limit outdoor time.")
+    else:
+        st.error("Air quality is Unhealthy. Wear a mask and stay indoors!")
+
+    # 7. Historical Chart
+    st.write("### 📊 24-Hour Trend")
+    fig = px.line(df, x='created_at', y='field1', title='PM2.5 Levels Over Time')
+    st.plotly_chart(fig, use_container_width=True)
+
+except:
+    st.error("Waiting for sensor data... Please ensure your ESP32 is uploading to ThingSpeak.")
